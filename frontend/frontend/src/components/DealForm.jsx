@@ -234,7 +234,7 @@ function DealForm({
                   name="title"
                   value={formData.title}
                   onChange={handleChange}
-                  placeholder="ABC CRM Deal"
+                  placeholder=" "
                   autoFocus
                   className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 focus:bg-white transition"
                 />

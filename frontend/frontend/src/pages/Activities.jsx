@@ -1,5 +1,4 @@
-
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 
 import api from "../api";
 
@@ -16,6 +15,7 @@ import {
   FiAlertCircle,
   FiChevronLeft,
   FiChevronRight,
+  FiFilter,
 } from "react-icons/fi";
 
 function Activities() {
@@ -40,45 +40,42 @@ function Activities() {
   const [type, setType] = useState("");
   const [outcome, setOutcome] = useState("");
 
+  // PAGINATION
   const [page, setPage] = useState(1);
-  const limit = 10;
-
+  const LIMIT = 50;
   const [totalActivities, setTotalActivities] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  // ==========================================
+  // FILTER POPOVER
+  const [showFilters, setShowFilters] = useState(false);
+  const filterRef = useRef(null);
+
   // FETCH ACTIVITIES
-  // ==========================================
   const fetchActivities = async () => {
     try {
       setLoading(true);
       setErrorMessage("");
 
       const params = {};
-
       if (search.trim()) params.search = search.trim();
       if (type) params.type = type;
       if (outcome) params.outcome = outcome;
-
       params.page = page;
-      params.limit = limit;
+      params.limit = LIMIT;
 
-      const response = await api.get("/activities", {
-        params,
-      });
+      const response = await api.get("/activities", { params });
 
       setActivities(response.data.activities || []);
-      setTotalActivities(response.data.totalActivities || 0);
+      setTotalActivities(response.data.total || 0);
       setTotalPages(response.data.totalPages || 1);
     } catch (error) {
       console.error(
         "Fetch activities error:",
         error.response?.data || error.message
       );
-
       setErrorMessage(
         error.response?.data?.message || "Failed to fetch activities"
       );
@@ -87,22 +84,16 @@ function Activities() {
     }
   };
 
-  // ==========================================
   // FETCH CRM DATA
-  // ==========================================
   const fetchRelatedData = async () => {
     try {
-      const [
-        leadsResponse,
-        contactsResponse,
-        companiesResponse,
-        dealsResponse,
-      ] = await Promise.all([
-        api.get("/leads"),
-        api.get("/contacts"),
-        api.get("/companies"),
-        api.get("/deals"),
-      ]);
+      const [leadsResponse, contactsResponse, companiesResponse, dealsResponse] =
+        await Promise.all([
+          api.get("/leads"),
+          api.get("/contacts"),
+          api.get("/companies"),
+          api.get("/deals"),
+        ]);
 
       setLeads(leadsResponse.data.leads || []);
       setContacts(contactsResponse.data.contacts || []);
@@ -116,9 +107,7 @@ function Activities() {
     }
   };
 
-  // ==========================================
   // EFFECTS
-  // ==========================================
   useEffect(() => {
     fetchRelatedData();
   }, []);
@@ -127,25 +116,29 @@ function Activities() {
     fetchActivities();
   }, [page, type, outcome]);
 
-  // Auto-dismiss messages
   useEffect(() => {
     if (!successMessage && !errorMessage) return;
-
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setSuccessMessage("");
       setErrorMessage("");
     }, 4000);
-
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [successMessage, errorMessage]);
 
-  // ==========================================
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) {
+        setShowFilters(false);
+      }
+    };
+    if (showFilters) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showFilters]);
+
   // HANDLERS
-  // ==========================================
   const handleSearch = (e) => {
     e.preventDefault();
     setPage(1);
-    fetchActivities();
   };
 
   const handleCreate = () => {
@@ -166,10 +159,7 @@ function Activities() {
   const handleDelete = async (activity) => {
     if (user?.role !== "admin") return;
 
-    const confirmed = window.confirm(
-      `Delete activity "${activity.title}"?`
-    );
-
+    const confirmed = window.confirm(`Delete activity "${activity.title}"?`);
     if (!confirmed) return;
 
     try {
@@ -177,10 +167,13 @@ function Activities() {
       setSuccessMessage("");
 
       await api.delete(`/activities/${activity._id}`);
-
       setSuccessMessage("Activity deleted successfully");
 
-      fetchActivities();
+      if (activities.length === 1 && page > 1) {
+        setPage((prev) => prev - 1);
+      } else {
+        await fetchActivities();
+      }
     } catch (error) {
       setErrorMessage(
         error.response?.data?.message || "Failed to delete activity"
@@ -201,130 +194,54 @@ function Activities() {
     setPage(1);
   };
 
-  // ==========================================
   // STATS
-  // ==========================================
   const stats = useMemo(() => {
     return {
       total: totalActivities,
-      calls: activities.filter((a) => a.type === "Call").length,
-      meetings: activities.filter((a) => a.type === "Meeting").length,
-      positive: activities.filter((a) => a.outcome === "Positive").length,
+      calls: activities.filter((activity) => activity.type === "Call").length,
+      meetings: activities.filter((activity) => activity.type === "Meeting").length,
+      positive: activities.filter((activity) => activity.outcome === "Positive").length,
     };
   }, [activities, totalActivities]);
 
+  // FILTER COUNTS
   const activeFilterCount = useMemo(() => {
     return [search, type, outcome].filter(Boolean).length;
   }, [search, type, outcome]);
 
-  // ==========================================
+  const dropdownFilterCount = useMemo(() => {
+    return [type, outcome].filter(Boolean).length;
+  }, [type, outcome]);
+
   // RENDER
-  // ==========================================
   return (
     <>
       <div className="p-4 sm:p-6 lg:p-8 space-y-5 max-w-[1600px] mx-auto w-full">
 
-        {/* PAGE HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">
-              Activities
-            </h1>
+        {/* ============================================
+            HEADER: SEARCH + FILTER (left) | ADD (right)
+            ============================================ */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
 
-            <p className="text-sm text-gray-500 mt-1">
-              Track calls, emails, meetings and customer interactions.
-            </p>
-          </div>
+          {/* LEFT: SEARCH + FILTER */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
 
-          <button
-            onClick={handleCreate}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg transition shadow-sm shadow-blue-600/20 w-full sm:w-auto"
-          >
-            <FiPlus size={18} />
-            Add Activity
-          </button>
-        </div>
-
-        {/* STATISTICS CARDS */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
-            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">
-              Total Activities
-            </p>
-
-            <p className="text-2xl font-bold text-gray-900 mt-2">
-              {loading ? "..." : stats.total}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">
-                Calls
-              </p>
-
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-            </div>
-
-            <p className="text-2xl font-bold text-gray-900 mt-2">
-              {loading ? "..." : stats.calls}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">
-                Meetings
-              </p>
-
-              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
-            </div>
-
-            <p className="text-2xl font-bold text-gray-900 mt-2">
-              {loading ? "..." : stats.meetings}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">
-                Positive
-              </p>
-
-              <span className="w-2 h-2 rounded-full bg-green-500"></span>
-            </div>
-
-            <p className="text-2xl font-bold text-gray-900 mt-2">
-              {loading ? "..." : stats.positive}
-            </p>
-          </div>
-        </div>
-
-        {/* SEARCH + FILTERS */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">
-          <div className="flex flex-wrap items-center gap-3">
-
-            <form
-              onSubmit={handleSearch}
-              className="relative flex-1 min-w-[240px]"
-            >
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">
-                <FiSearch size={18} />
-              </span>
-
+            {/* SEARCH */}
+            <form onSubmit={handleSearch} className="relative w-full sm:w-64">
+              <FiSearch
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                size={15}
+              />
               <input
                 type="text"
                 placeholder="Search activities..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  paddingLeft: "2.75rem",
-                  paddingRight: "2.5rem",
-                  height: "2.75rem",
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
                 }}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 focus:bg-white transition"
+                className="w-full pl-9 pr-8 h-9 bg-white border border-gray-200 rounded-lg text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition"
               />
-
               {search && (
                 <button
                   type="button"
@@ -332,61 +249,185 @@ function Activities() {
                     setSearch("");
                     setPage(1);
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center rounded text-gray-400 hover:text-gray-600"
                 >
-                  <FiX size={14} />
+                  <FiX size={13} />
                 </button>
               )}
             </form>
 
-            <select
-              value={type}
-              onChange={(e) => {
-                setType(e.target.value);
-                setPage(1);
-              }}
-              style={{ height: "2.75rem" }}
-              className="w-full sm:w-40 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 focus:bg-white transition cursor-pointer"
-            >
-              <option value="">All Types</option>
-              <option value="Call">Call</option>
-              <option value="Email">Email</option>
-              <option value="Meeting">Meeting</option>
-              <option value="Note">Note</option>
-              <option value="Follow-up">Follow-up</option>
-              <option value="Demo">Demo</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Other">Other</option>
-            </select>
+            {/* FILTER BUTTON + POPOVER */}
+            <div className="relative" ref={filterRef}>
+              <button
+                onClick={() => setShowFilters((prev) => !prev)}
+                className={`inline-flex items-center justify-center gap-1.5 px-3 h-9 text-sm font-medium rounded-lg border transition whitespace-nowrap ${
+                  dropdownFilterCount > 0
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                <FiFilter size={14} />
+                <span className="hidden sm:inline">Filters</span>
+                {dropdownFilterCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[10px] font-semibold bg-blue-600 text-white rounded-full">
+                    {dropdownFilterCount}
+                  </span>
+                )}
+              </button>
 
-            <select
-              value={outcome}
-              onChange={(e) => {
-                setOutcome(e.target.value);
-                setPage(1);
-              }}
-              style={{ height: "2.75rem" }}
-              className="w-full sm:w-44 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 focus:bg-white transition cursor-pointer"
-            >
-              <option value="">All Outcomes</option>
-              <option value="Positive">Positive</option>
-              <option value="Neutral">Neutral</option>
-              <option value="Negative">Negative</option>
-              <option value="No Response">No Response</option>
-              <option value="Completed">Completed</option>
-              <option value="Pending">Pending</option>
-            </select>
+              {/* MODERN FILTER POPOVER (left aligned) */}
+              {showFilters && (
+                <div className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg shadow-gray-200/60 z-30 overflow-hidden">
 
-            <button
-              type="button"
-              onClick={resetFilters}
-              disabled={activeFilterCount === 0}
-              style={{ height: "2.75rem" }}
-              className="px-4 inline-flex items-center justify-center gap-1.5 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 hover:text-red-600 hover:bg-red-50 hover:border-red-200 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <FiX size={16} />
-              <span>Reset</span>
-            </button>
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Filters
+                    </h3>
+                    {dropdownFilterCount > 0 && (
+                      <button
+                        onClick={resetFilters}
+                        className="text-xs font-medium text-gray-500 hover:text-red-600 transition"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="p-4 space-y-4 max-h-[400px] overflow-y-auto">
+
+                    {/* TYPE */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">
+                        Type
+                      </label>
+                      <select
+                        value={type}
+                        onChange={(e) => {
+                          setType(e.target.value);
+                          setPage(1);
+                        }}
+                        className="w-full h-9 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 cursor-pointer"
+                      >
+                        <option value="">All Types</option>
+                        <option value="Call">Call</option>
+                        <option value="Email">Email</option>
+                        <option value="Meeting">Meeting</option>
+                        <option value="Note">Note</option>
+                        <option value="Follow-up">Follow-up</option>
+                        <option value="Demo">Demo</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+
+                    {/* OUTCOME CHIPS */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-500 mb-2">
+                        Outcome
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          "Positive",
+                          "Neutral",
+                          "Negative",
+                          "No Response",
+                          "Completed",
+                          "Pending",
+                        ].map((o) => (
+                          <button
+                            key={o}
+                            onClick={() => {
+                              setOutcome(outcome === o ? "" : o);
+                              setPage(1);
+                            }}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-md border transition ${
+                              outcome === o
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                            }`}
+                          >
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 px-4 py-3 bg-gray-50 border-t border-gray-100">
+                    <button
+                      onClick={resetFilters}
+                      disabled={dropdownFilterCount === 0}
+                      className="text-xs font-medium text-gray-600 hover:text-gray-900 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Clear all
+                    </button>
+                    <button
+                      onClick={() => setShowFilters(false)}
+                      className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition"
+                    >
+                     Apply
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: ADD BUTTON */}
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center justify-center gap-1.5 px-4 h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm whitespace-nowrap self-start lg:self-auto"
+          >
+            <FiPlus size={15} />
+            Add Activity
+          </button>
+        </div>
+
+        {/* STATS CARDS */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+              Total
+            </p>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {loading ? "—" : stats.total}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                Calls
+              </p>
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            </div>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {loading ? "—" : stats.calls}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                Meetings
+              </p>
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+            </div>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {loading ? "—" : stats.meetings}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wider">
+                Positive
+              </p>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            </div>
+            <p className="text-xl font-bold text-gray-900 mt-1">
+              {loading ? "—" : stats.positive}
+            </p>
           </div>
         </div>
 
@@ -394,9 +435,7 @@ function Activities() {
         {successMessage && (
           <div className="flex items-start gap-3 bg-green-50 border border-green-200 text-green-800 text-sm px-4 py-3 rounded-lg">
             <FiCheckCircle className="flex-shrink-0 mt-0.5" size={18} />
-
             <p className="flex-1">{successMessage}</p>
-
             <button
               onClick={() => setSuccessMessage("")}
               className="text-green-600 hover:text-green-800 flex-shrink-0"
@@ -409,9 +448,7 @@ function Activities() {
         {errorMessage && (
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-800 text-sm px-4 py-3 rounded-lg">
             <FiAlertCircle className="flex-shrink-0 mt-0.5" size={18} />
-
             <p className="flex-1">{errorMessage}</p>
-
             <button
               onClick={() => setErrorMessage("")}
               className="text-red-600 hover:text-red-800 flex-shrink-0"
@@ -421,59 +458,14 @@ function Activities() {
           </div>
         )}
 
-        {/* RESULT INFO */}
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-500">
-            Showing{" "}
-            <span className="font-semibold text-gray-700">
-              {activities.length}
-            </span>{" "}
-            {activities.length === 1 ? "activity" : "activities"}
-
-            {totalActivities > 0 && (
-              <span className="ml-1">
-                of {totalActivities}
-              </span>
-            )}
-
-            {activeFilterCount > 0 && (
-              <span className="ml-1">
-                · {activeFilterCount}{" "}
-                {activeFilterCount === 1 ? "filter" : "filters"} applied
-              </span>
-            )}
-          </p>
-        </div>
-
         {/* TABLE */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <svg
-                className="animate-spin h-6 w-6 text-blue-600 mb-3"
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                ></circle>
-
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                ></path>
-              </svg>
-
-              <p className="text-sm text-gray-500">
-                Loading activities...
-              </p>
+            <div className="flex items-center justify-center py-16">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-7 h-7 border-[3px] border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+                <p className="text-sm text-gray-500">Loading activities...</p>
+              </div>
             </div>
           ) : (
             <ActivityTable
@@ -486,44 +478,59 @@ function Activities() {
           )}
         </div>
 
-        {/* PAGINATION */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between gap-3 pt-2">
+        {/* FOOTER: SHOWING (left) | PAGE INFO + PAGINATION (right) */}
+        {!loading && totalActivities > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* SHOWING */}
             <p className="text-xs text-gray-500">
-              Page{" "}
-              <span className="font-semibold text-gray-700">
-                {page}
+              Showing{" "}
+              <span className="font-medium text-gray-700">
+                {activities.length}
               </span>{" "}
-              of{" "}
-              <span className="font-semibold text-gray-700">
-                {totalPages}
-              </span>
+              {activities.length === 1 ? "activity" : "activities"}
+              {totalActivities > 0 && (
+                <span className="ml-1">of {totalActivities}</span>
+              )}
+              {activeFilterCount > 0 && (
+                <span className="ml-1">
+                  · {activeFilterCount}{" "}
+                  {activeFilterCount === 1 ? "filter" : "filters"} applied
+                </span>
+              )}
             </p>
 
-            <div className="flex items-center gap-2">
-              <button
-                disabled={page === 1}
-                onClick={() => setPage((prev) => prev - 1)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <FiChevronLeft size={16} />
-                Previous
-              </button>
+            {/* PAGE INFO + PAGINATION */}
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-gray-500">
+                Page <span className="font-medium text-gray-700">{page}</span> of{" "}
+                <span className="font-medium text-gray-700">{totalPages}</span>
+              </p>
 
-              <button
-                disabled={page === totalPages}
-                onClick={() => setPage((prev) => prev + 1)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-                <FiChevronRight size={16} />
-              </button>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    disabled={page === 1}
+                    onClick={() => setPage((prev) => prev - 1)}
+                    className="w-8 h-8 inline-flex items-center justify-center text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <FiChevronLeft size={16} />
+                  </button>
+
+                  <button
+                    disabled={page === totalPages}
+                    onClick={() => setPage((prev) => prev + 1)}
+                    className="w-8 h-8 inline-flex items-center justify-center text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <FiChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* MODALS — Portal handles */}
+      {/* ACTIVITY FORM */}
       {showForm && (
         <ActivityForm
           user={user}
@@ -540,6 +547,7 @@ function Activities() {
         />
       )}
 
+      {/* VIEW ACTIVITY */}
       {showView && selectedActivity && (
         <ViewActivity
           activity={selectedActivity}
@@ -554,4 +562,3 @@ function Activities() {
 }
 
 export default Activities;
-

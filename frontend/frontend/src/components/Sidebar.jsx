@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
@@ -8,22 +9,109 @@ import {
   FiUsers as FiCustomers,
   FiCheckSquare,
   FiActivity,
-  FiBell,
-  FiLogOut,
   FiX,
+  FiSettings,
+  FiChevronDown,
 } from "react-icons/fi";
 
 function Sidebar({ isOpen = false, onClose = () => {} }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
-  };
+  // =====================================================
+  // COLLAPSIBLE STATE
+  // =====================================================
+  const [moreOpen, setMoreOpen] = useState(() => {
+    const saved = localStorage.getItem("sidebar_more_open");
+    return saved !== null ? JSON.parse(saved) : false;
+  });
 
-  // Nav click — mobile pe sidebar close bhi karega
+  const [adminOpen, setAdminOpen] = useState(() => {
+    const saved = localStorage.getItem("sidebar_admin_open");
+    return saved !== null ? JSON.parse(saved) : false;
+  });
+
+  // Persist state
+  useEffect(() => {
+    localStorage.setItem("sidebar_more_open", JSON.stringify(moreOpen));
+  }, [moreOpen]);
+
+  useEffect(() => {
+    localStorage.setItem("sidebar_admin_open", JSON.stringify(adminOpen));
+  }, [adminOpen]);
+
+  // Auto-open section if current page belongs to it
+  useEffect(() => {
+    const morePaths = ["/activities", "/customers", "/companies"];
+    const adminPaths = ["/users"];
+
+    if (morePaths.includes(location.pathname)) {
+      setMoreOpen(true);
+    }
+    if (adminPaths.includes(location.pathname)) {
+      setAdminOpen(true);
+    }
+  }, [location.pathname]);
+
+  // =====================================================
+  // NAV ITEMS
+  // =====================================================
+  const mainItems = [
+    {
+      name: "Dashboard",
+      path: "/",
+      icon: <FiHome size={18} />,
+    },
+    {
+      name: "Leads",
+      path: "/leads",
+      icon: <FiUsers size={18} />,
+    },
+    {
+      name: "Contacts",
+      path: "/contacts",
+      icon: <FiUser size={18} />,
+    },
+    {
+      name: "Deals",
+      path: "/deals",
+      icon: <FiBriefcase size={18} />,
+    },
+    {
+      name: "Tasks",
+      path: "/tasks",
+      icon: <FiCheckSquare size={18} />,
+    },
+  ];
+
+  const moreItems = [
+    {
+      name: "Activities",
+      path: "/activities",
+      icon: <FiActivity size={18} />,
+    },
+    {
+      name: "Customers",
+      path: "/customers",
+      icon: <FiCustomers size={18} />,
+    },
+    {
+      name: "Companies",
+      path: "/companies",
+      icon: <FiBriefcase size={18} />,
+    },
+  ];
+
+  const adminItems = [
+    {
+      name: "Users",
+      path: "/users",
+      icon: <FiSettings size={18} />,
+    },
+  ];
+
+  // Nav click
   const handleNavigate = (path) => {
     navigate(path);
     if (window.innerWidth < 768) {
@@ -31,25 +119,50 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
     }
   };
 
-  // Menu items array
-  const menuItems = [
-    { name: "Dashboard", path: "/", icon: <FiHome size={18} /> },
-    ...(user?.role === "admin"
-      ? [{ name: "Users", path: "/users", icon: <FiUsers size={18} /> }]
-      : []),
-    { name: "Leads", path: "/leads", icon: <FiUsers size={18} /> },
-    { name: "Contacts", path: "/contacts", icon: <FiUser size={18} /> },
-    { name: "Deals", path: "/deals", icon: <FiBriefcase size={18} /> },
-    { name: "Customers", path: "/customers", icon: <FiCustomers size={18} /> },
-    { name: "Tasks", path: "/tasks", icon: <FiCheckSquare size={18} /> },
-    { name: "Activities", path: "/activities", icon: <FiActivity size={18} /> },
-    { name: "Notifications", path: "/notifications", icon: <FiBell size={18} /> },
-  ];
+  // =====================================================
+  // RENDER NAV ITEM
+  // =====================================================
+  const renderNavItem = (item) => {
+    const isActive = location.pathname === item.path;
+
+    return (
+      <div
+        key={item.path}
+        onClick={() => handleNavigate(item.path)}
+        className={`flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer text-sm font-medium transition-colors duration-150 ${
+          isActive
+            ? "bg-blue-600 text-white"
+            : "hover:bg-gray-800 hover:text-white"
+        }`}
+      >
+        <span className="text-base">{item.icon}</span>
+        <span>{item.name}</span>
+      </div>
+    );
+  };
+
+  // =====================================================
+  // RENDER SECTION HEADER (collapsible)
+  // =====================================================
+  const renderSectionHeader = (label, isOpen, onToggle) => (
+    <button
+      onClick={onToggle}
+      className="w-full flex items-center justify-between px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-500 hover:text-gray-300 transition-colors"
+    >
+      <span>{label}</span>
+      <FiChevronDown
+        size={14}
+        className={`transition-transform duration-200 ${
+          isOpen ? "rotate-180" : "rotate-0"
+        }`}
+      />
+    </button>
+  );
 
   return (
     <>
       {/* =====================================================
-          OVERLAY — sirf mobile pe, jab sidebar khula ho
+          OVERLAY — sirf mobile pe
       ===================================================== */}
       {isOpen && (
         <div
@@ -84,7 +197,6 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
             </h2>
           </div>
 
-          {/* Close button — sirf mobile pe */}
           <button
             onClick={onClose}
             className="md:hidden text-gray-400 hover:text-white transition-colors"
@@ -95,58 +207,55 @@ function Sidebar({ isOpen = false, onClose = () => {} }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {menuItems.map((item) => {
-            const isActive = location.pathname === item.path;
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
 
-            return (
-              <div
-                key={item.path}
-                onClick={() => handleNavigate(item.path)}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer text-sm font-medium transition-colors duration-150 ${
-                  isActive
-                    ? "bg-blue-600 text-white"
-                    : "hover:bg-gray-800 hover:text-white"
-                }`}
-              >
-                <span className="text-base">{item.icon}</span>
-                <span>{item.name}</span>
+          {/* ============================================
+              MAIN SECTION (always visible)
+              ============================================ */}
+          <div className="space-y-1">
+            {mainItems.map(renderNavItem)}
+          </div>
+
+          {/* ============================================
+              MORE SECTION (collapsible)
+              ============================================ */}
+          <div className="mt-4 pt-3 border-t border-gray-800">
+            {renderSectionHeader("More", moreOpen, () =>
+              setMoreOpen((prev) => !prev)
+            )}
+
+            <div
+              className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                moreOpen ? "max-h-64 opacity-100 mt-1" : "max-h-0 opacity-0"
+              }`}
+            >
+              <div className="space-y-1">
+                {moreItems.map(renderNavItem)}
               </div>
-            );
-          })}
-        </nav>
-
-        {/* Bottom — User Info + Logout */}
-        <div className="border-t border-gray-800 p-4 flex-shrink-0">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-              {user?.name
-                ? user.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase()
-                : "U"}
-            </div>
-            <div className="overflow-hidden">
-              <p className="text-sm text-white font-medium truncate">
-                {user?.name || "User"}
-              </p>
-              <p className="text-xs text-gray-500 capitalize truncate">
-                {user?.role || "guest"}
-              </p>
             </div>
           </div>
 
-          <button
-  onClick={handleLogout}
-  className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-gray-700 hover:border-gray-500 hover:bg-gray-800 text-gray-300 hover:text-white text-sm font-medium rounded-lg transition-colors"
->
-  <FiLogOut size={16} />
-  Logout
-</button>
-        </div>
+          {/* ============================================
+              ADMIN SECTION (collapsible, admin only)
+              ============================================ */}
+          {user?.role === "admin" && (
+            <div className="mt-4 pt-3 border-t border-gray-800">
+              {renderSectionHeader("Admin", adminOpen, () =>
+                setAdminOpen((prev) => !prev)
+              )}
+
+              <div
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  adminOpen ? "max-h-64 opacity-100 mt-1" : "max-h-0 opacity-0"
+                }`}
+              >
+                <div className="space-y-1">
+                  {adminItems.map(renderNavItem)}
+                </div>
+              </div>
+            </div>
+          )}
+        </nav>
       </aside>
     </>
   );

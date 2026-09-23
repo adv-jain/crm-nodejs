@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   FiBell,
@@ -117,9 +117,7 @@ function Notifications() {
 
       if (!response.ok) throw new Error("Failed to mark all as read");
 
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, isRead: true }))
-      );
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
 
       if (filter === "unread") setPage(1);
@@ -159,17 +157,17 @@ function Notifications() {
   // ==========================================
   const getNotificationIcon = (type) => {
     const map = {
-      LEAD_ASSIGNED: <FiUser size={18} />,
-      LEAD_CONVERTED: <FiRefreshCw size={18} />,
-      CONTACT_ASSIGNED: <FiBookmark size={18} />,
-      TASK_ASSIGNED: <FiClipboard size={18} />,
-      TASK_COMPLETED: <FiCheckCircle size={18} />,
-      DEAL_ASSIGNED: <FiBriefcase size={18} />,
-      DEAL_WON: <FiAward size={18} />,
-      DEAL_LOST: <FiXCircle size={18} />,
-      CUSTOMER_CREATED: <FiStar size={18} />,
+      LEAD_ASSIGNED: <FiUser size={16} />,
+      LEAD_CONVERTED: <FiRefreshCw size={16} />,
+      CONTACT_ASSIGNED: <FiBookmark size={16} />,
+      TASK_ASSIGNED: <FiClipboard size={16} />,
+      TASK_COMPLETED: <FiCheckCircle size={16} />,
+      DEAL_ASSIGNED: <FiBriefcase size={16} />,
+      DEAL_WON: <FiAward size={16} />,
+      DEAL_LOST: <FiXCircle size={16} />,
+      CUSTOMER_CREATED: <FiStar size={16} />,
     };
-    return map[type] || <FiBell size={18} />;
+    return map[type] || <FiBell size={16} />;
   };
 
   // ==========================================
@@ -220,39 +218,27 @@ function Notifications() {
   // RENDER
   // ==========================================
   return (
-    <div className="p-4 sm:p-6 lg:p-8 space-y-5 max-w-[1600px] mx-auto min-h-screen bg-gray-50">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-5 max-w-[1600px] mx-auto">
 
-      {/* PAGE HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">
-            Notifications
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Stay updated with your CRM activities.
-          </p>
-        </div>
+      {/* ============================================
+          HEADER: TITLE | FILTER TOGGLE + MARK ALL
+          ============================================ */}
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
 
-        {unreadCount > 0 && (
-          <button
-            onClick={markAllAsRead}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-semibold rounded-lg transition shadow-sm shadow-blue-600/20 w-full sm:w-auto"
-          >
-            <FiCheckSquare size={18} />
-            Mark all as read
-          </button>
-        )}
-      </div>
+        {/* LEFT: TITLE */}
+        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex-shrink-0">
+          Notifications
+        </h1>
 
-      {/* FILTERS TOOLBAR */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 sm:p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          {/* Filter toggle */}
-          <div className="inline-flex items-center bg-gray-100 rounded-lg p-1">
+        {/* RIGHT: FILTER TOGGLE + MARK ALL */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full lg:w-auto">
+
+          {/* FILTER TOGGLE */}
+          <div className="inline-flex items-center bg-gray-100 rounded-lg p-0.5 h-9">
             <button
               type="button"
               onClick={() => handleFilterChange("all")}
-              className={`px-4 py-1.5 text-sm font-medium rounded-md transition ${
+              className={`px-3 h-8 text-sm font-medium rounded-md transition ${
                 filter === "all"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
@@ -263,7 +249,7 @@ function Notifications() {
             <button
               type="button"
               onClick={() => handleFilterChange("unread")}
-              className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium rounded-md transition ${
+              className={`inline-flex items-center gap-1.5 px-3 h-8 text-sm font-medium rounded-md transition ${
                 filter === "unread"
                   ? "bg-white text-gray-900 shadow-sm"
                   : "text-gray-500 hover:text-gray-700"
@@ -272,7 +258,7 @@ function Notifications() {
               Unread
               {unreadCount > 0 && (
                 <span
-                  className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full ${
+                  className={`inline-flex items-center justify-center min-w-[16px] h-[16px] px-1 text-[10px] font-semibold rounded-full ${
                     filter === "unread"
                       ? "bg-blue-600 text-white"
                       : "bg-gray-200 text-gray-700"
@@ -284,45 +270,48 @@ function Notifications() {
             </button>
           </div>
 
-          {/* Total count */}
-          <p className="text-xs text-gray-500">
-            <span className="font-semibold text-gray-700">
-              {pagination.total}
-            </span>{" "}
-            {pagination.total === 1 ? "notification" : "notifications"}
-          </p>
+          {/* MARK ALL AS READ */}
+          {unreadCount > 0 && (
+            <button
+              onClick={markAllAsRead}
+              className="inline-flex items-center justify-center gap-1.5 px-4 h-9 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition shadow-sm whitespace-nowrap"
+            >
+              <FiCheckSquare size={14} />
+              Mark all as read
+            </button>
+          )}
         </div>
       </div>
 
+      {/* RESULT INFO */}
+      {!loading && pagination.total > 0 && (
+        <div className="flex items-center justify-between text-xs text-gray-500 px-1">
+          <p>
+            Showing <span className="font-medium text-gray-700">{notifications.length}</span> of{" "}
+            <span className="font-medium text-gray-700">{pagination.total}</span>{" "}
+            {pagination.total === 1 ? "notification" : "notifications"}
+          </p>
+          <p>
+            Page <span className="font-medium text-gray-700">{page}</span> of{" "}
+            <span className="font-medium text-gray-700">
+              {pagination.totalPages}
+            </span>
+          </p>
+        </div>
+      )}
+
       {/* CONTENT */}
       {loading ? (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20">
-          <svg
-            className="animate-spin h-6 w-6 text-blue-600 mb-3"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            ></circle>
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            ></path>
-          </svg>
-          <p className="text-sm text-gray-500">Loading notifications...</p>
+        <div className="bg-white rounded-xl border border-gray-200 flex items-center justify-center py-16">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-7 h-7 border-[3px] border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+            <p className="text-sm text-gray-500">Loading notifications...</p>
+          </div>
         </div>
       ) : notifications.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center py-20 px-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-            <FiInbox size={28} className="text-gray-400" />
+        <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-16 px-6 text-center">
+          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+            <FiInbox size={24} className="text-gray-400" />
           </div>
           <h3 className="text-base font-semibold text-gray-800">
             No notifications
@@ -334,11 +323,11 @@ function Notifications() {
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2">
           {notifications.map((notification) => (
             <div
               key={notification._id}
-              className={`bg-white rounded-xl border shadow-sm p-4 flex items-start gap-4 transition ${
+              className={`bg-white rounded-lg border p-4 flex items-start gap-3 transition ${
                 !notification.isRead
                   ? "border-blue-200 bg-blue-50/30"
                   : "border-gray-200 hover:border-gray-300"
@@ -346,7 +335,7 @@ function Notifications() {
             >
               {/* ICON */}
               <div
-                className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ring-1 ring-inset ${getIconColor(
+                className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ring-1 ring-inset ${getIconColor(
                   notification.type
                 )}`}
               >
@@ -372,12 +361,12 @@ function Notifications() {
                   </span>
                 </div>
 
-                <p className="text-sm text-gray-600 mt-1.5 leading-relaxed">
+                <p className="text-sm text-gray-600 mt-1 leading-relaxed">
                   {notification.message}
                 </p>
 
                 {/* ACTIONS */}
-                <div className="flex items-center gap-2 mt-3">
+                <div className="flex items-center gap-2 mt-2.5">
                   {!notification.isRead && (
                     <button
                       onClick={() => markAsRead(notification._id)}
@@ -403,31 +392,29 @@ function Notifications() {
 
       {/* PAGINATION */}
       {!loading && notifications.length > 0 && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between gap-3 pt-2">
+        <div className="flex items-center justify-between">
           <p className="text-xs text-gray-500">
-            Page{" "}
-            <span className="font-semibold text-gray-700">{page}</span> of{" "}
-            <span className="font-semibold text-gray-700">
-              {pagination.totalPages}
-            </span>
+            {page} / {pagination.totalPages}
           </p>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               disabled={page === 1}
               onClick={() => setPage((prev) => prev - 1)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 inline-flex items-center justify-center text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FiChevronLeft size={16} />
-              Previous
             </button>
+
+            <span className="px-3 h-8 inline-flex items-center text-sm font-medium text-gray-700">
+              {page}
+            </span>
 
             <button
               disabled={page === pagination.totalPages}
               onClick={() => setPage((prev) => prev + 1)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-8 h-8 inline-flex items-center justify-center text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              Next
               <FiChevronRight size={16} />
             </button>
           </div>

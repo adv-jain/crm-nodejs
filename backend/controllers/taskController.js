@@ -599,8 +599,16 @@ const getTasks = async (req, res) => {
       priority,
       assignedTo,
       type,
+
+      // ========================================
+      // PAGINATION
+      // Default = 50
+      // Maximum = 50
+      // ========================================
+
       page = 1,
-      limit = 10,
+      limit = 50,
+
       sortBy = "createdAt",
       sortOrder = "desc"
     } = req.query;
@@ -737,13 +745,14 @@ const getTasks = async (req, res) => {
       );
 
 
+    // Maximum 50 records per request
     const limitNumber =
       Math.min(
         Math.max(
-          parseInt(limit) || 10,
+          parseInt(limit) || 50,
           1
         ),
-        100
+        50
       );
 
 
@@ -823,28 +832,61 @@ const getTasks = async (req, res) => {
         .limit(limitNumber);
 
 
-    const totalTasks =
+    // ========================================
+    // TOTAL TASKS
+    // ========================================
+
+    const total =
       await Task.countDocuments(filter);
 
 
+    // ========================================
+    // TOTAL PAGES
+    // ========================================
+
     const totalPages =
       Math.ceil(
-        totalTasks / limitNumber
+        total / limitNumber
       );
 
+
+    // ========================================
+    // PAGINATION STATUS
+    // ========================================
+
+    const hasNextPage =
+      pageNumber < totalPages;
+
+
+    const hasPreviousPage =
+      pageNumber > 1;
+
+
+    // ========================================
+    // RESPONSE
+    // ========================================
 
     return res.status(200).json({
 
       message:
         "Tasks fetched successfully",
 
-      count: tasks.length,
+      count:
+        tasks.length,
 
-      totalTasks,
+      total,
 
-      currentPage: pageNumber,
+      page:
+        pageNumber,
+
+      limit:
+        limitNumber,
 
       totalPages,
+
+      hasNextPage,
+
+      hasPreviousPage,
 
       tasks
     });

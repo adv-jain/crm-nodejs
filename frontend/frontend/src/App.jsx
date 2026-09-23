@@ -1,4 +1,3 @@
-
 import {
   BrowserRouter,
   Routes,
@@ -16,6 +15,7 @@ import Users from "./pages/Users";
 import Tasks from "./pages/Tasks";
 import Activities from "./pages/Activities";
 import Customers from "./pages/Customers";
+import Companies from "./pages/Companies";
 import Notifications from "./components/Notifications";
 
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -31,29 +31,26 @@ function App() {
             PUBLIC ROUTES
         ===================================================== */}
 
-        {/* LOGIN — no layout */}
         <Route
           path="/login"
           element={<LoginPage />}
         />
 
-        {/* SIGNUP — no layout */}
         <Route
           path="/signup"
           element={<SignupPage />}
         />
-        
-        {/* FORGOT PASSWORD — no layout */}
-<Route
-  path="/forgot-password"
-  element={<ForgotPasswordPage />}
-/>
+
+        <Route
+          path="/forgot-password"
+          element={<ForgotPasswordPage />}
+        />
 
         {/* =====================================================
             PROTECTED ROUTES
         ===================================================== */}
 
-        {/* DASHBOARD — with Header */}
+        {/* DASHBOARD */}
         <Route
           path="/"
           element={
@@ -93,6 +90,22 @@ function App() {
               >
                 <DashboardLayout showHeader={false}>
                   <Leads />
+                </DashboardLayout>
+              </RoleRoute>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* COMPANIES — Admin, Manager, Sales */}
+        <Route
+          path="/companies"
+          element={
+            <ProtectedRoute>
+              <RoleRoute
+                allowedRoles={["admin", "manager", "sales"]}
+              >
+                <DashboardLayout showHeader={false}>
+                  <Companies />
                 </DashboardLayout>
               </RoleRoute>
             </ProtectedRoute>
@@ -197,4 +210,3 @@ function App() {
 }
 
 export default App;
-

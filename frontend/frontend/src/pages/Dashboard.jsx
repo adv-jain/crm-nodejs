@@ -12,7 +12,6 @@ import {
 import {
   FiUsers,
   FiBriefcase,
-  FiDollarSign,
   FiAlertCircle,
   FiTrendingUp,
   FiTrendingDown,
@@ -21,6 +20,8 @@ import {
   FiCheckCircle,
   FiCalendar,
 } from "react-icons/fi";
+
+import { TbCurrencyRupee } from "react-icons/tb";
 
 function Dashboard() {
   // =====================================================
@@ -219,15 +220,15 @@ function Dashboard() {
         sparkColor: "#16a34a",
       },
       {
-        label: "Revenue (Expected)",
-        value: formatCurrency(stats.pipelineValue),
-        icon: <FiDollarSign size={20} />,
-        color: "bg-purple-50 text-purple-600",
-        trend: "up",
-        change: 18,
-        sparkline: sparkData("up"),
-        sparkColor: "#9333ea",
-      },
+  label: "Revenue (Expected)",
+  value: formatCurrency(stats.pipelineValue),
+  icon: <TbCurrencyRupee size={20} />,
+  color: "bg-purple-50 text-purple-600",
+  trend: "up",
+  change: 18,
+  sparkline: sparkData("up"),
+  sparkColor: "#9333ea",
+},
       {
         label: "Open Tasks",
         value: upcomingTasks.length,

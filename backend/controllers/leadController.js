@@ -55,7 +55,6 @@ const createLead = async (req, res) => {
       req.user.role === "manager"
     ) {
       if (assignedTo) {
-        // Validate ObjectId before database query
         if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
           return res.status(400).json({
             message: "Invalid assigned user ID"
@@ -101,14 +100,12 @@ const createLead = async (req, res) => {
     // =================================================
 
     if (company) {
-      // Check valid MongoDB ObjectId
       if (!mongoose.Types.ObjectId.isValid(company)) {
         return res.status(400).json({
           message: "Invalid company ID"
         });
       }
 
-      // Check company exists
       const companyExists = await Company.findById(company);
 
       if (!companyExists) {
@@ -139,13 +136,6 @@ const createLead = async (req, res) => {
 
     // =================================================
     // NOTIFICATION
-    // =================================================
-    // Lead create hone ke baad assigned user ko
-    // notification milegi.
-    //
-    // Example:
-    // Admin → Lead create → Sales assigned
-    // Sales → 🔔 New Lead Assigned
     // =================================================
 
     if (lead.assignedTo) {
@@ -184,7 +174,7 @@ const createLead = async (req, res) => {
 };
 
 // =====================================================
-// GET LEADS
+// GET LEADS - PAGINATION
 // =====================================================
 
 const getLeads = async (req, res) => {
@@ -193,13 +183,31 @@ const getLeads = async (req, res) => {
       status,
       source,
       priority,
-      search
+      search,
+      page = 1,
+      limit = 50
     } = req.query;
 
     // =================================================
-    // IMPORTANT
-    // Converted leads DB mein rahenge,
-    // lekin Leads list mein nahi dikhenge.
+    // PAGINATION
+    // =================================================
+
+    const currentPage = Math.max(
+      parseInt(page) || 1,
+      1
+    );
+
+    // Maximum 50 records per request
+    const recordsPerPage = Math.min(
+      Math.max(parseInt(limit) || 50, 1),
+      50
+    );
+
+    const skip =
+      (currentPage - 1) * recordsPerPage;
+
+    // =================================================
+    // BASE FILTER
     // =================================================
 
     let filter = {
@@ -301,7 +309,13 @@ const getLeads = async (req, res) => {
     }
 
     // =================================================
-    // FETCH LEADS
+    // TOTAL COUNT
+    // =================================================
+
+    const total = await Lead.countDocuments(filter);
+
+    // =================================================
+    // FETCH PAGINATED LEADS
     // =================================================
 
     const leads = await Lead.find(filter)
@@ -316,15 +330,51 @@ const getLeads = async (req, res) => {
       .populate(
         "convertedContact",
         "firstName lastName email phone"
-      );
+      )
+      .sort({
+        createdAt: -1
+      })
+      .skip(skip)
+      .limit(recordsPerPage);
+
+    // =================================================
+    // TOTAL PAGES
+    // =================================================
+
+    const totalPages = Math.ceil(
+      total / recordsPerPage
+    );
+
+    // =================================================
+    // RESPONSE
+    // =================================================
 
     return res.status(200).json({
       message: "Leads fetched successfully",
+
       count: leads.length,
+
+      total,
+
+      page: currentPage,
+
+      limit: recordsPerPage,
+
+      totalPages,
+
+      hasNextPage:
+        currentPage < totalPages,
+
+      hasPreviousPage:
+        currentPage > 1,
+
       leads
     });
   } catch (error) {
-    console.error("Get Leads Error:", error);
+    console.error(
+      "Get Leads Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Server error",
@@ -419,7 +469,6 @@ const updateLead = async (req, res) => {
       req.user.role === "manager" &&
       req.body.assignedTo
     ) {
-      // Validate ObjectId
       if (
         !mongoose.Types.ObjectId.isValid(
           req.body.assignedTo
@@ -452,7 +501,6 @@ const updateLead = async (req, res) => {
       req.user.role === "admin" &&
       req.body.assignedTo
     ) {
-      // Validate ObjectId
       if (
         !mongoose.Types.ObjectId.isValid(
           req.body.assignedTo
@@ -580,7 +628,10 @@ const updateLead = async (req, res) => {
       lead: populatedLead
     });
   } catch (error) {
-    console.error("Update Lead Error:", error);
+    console.error(
+      "Update Lead Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Server error",
@@ -595,7 +646,10 @@ const updateLead = async (req, res) => {
 
 const deleteLead = async (req, res) => {
   try {
-    // Validate Lead ID first
+    // =================================================
+    // VALIDATE LEAD ID
+    // =================================================
+
     if (
       !mongoose.Types.ObjectId.isValid(
         req.params.id
@@ -659,7 +713,10 @@ const deleteLead = async (req, res) => {
       message: "Lead deleted successfully"
     });
   } catch (error) {
-    console.error("Delete Lead Error:", error);
+    console.error(
+      "Delete Lead Error:",
+      error
+    );
 
     return res.status(500).json({
       message: "Server error",
@@ -674,7 +731,10 @@ const deleteLead = async (req, res) => {
 
 const getLeadById = async (req, res) => {
   try {
-    // Validate Lead ID
+    // =================================================
+    // VALIDATE LEAD ID
+    // =================================================
+
     if (
       !mongoose.Types.ObjectId.isValid(
         req.params.id
@@ -975,7 +1035,6 @@ const convertLead = async (req, res) => {
     // =================================================
 
     if (lead.company) {
-      // Validate ObjectId
       if (
         !mongoose.Types.ObjectId.isValid(
           lead.company

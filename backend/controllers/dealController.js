@@ -100,7 +100,6 @@ const validateAssignedUser = async (userId) => {
       });
 
     return user;
-
   } catch (error) {
     console.error(
       "Validate assigned user error:",
@@ -135,7 +134,6 @@ const canAccessDeal = async (
   deal,
   user
 ) => {
-
   // ===================================================
   // ADMIN
   // ===================================================
@@ -149,7 +147,6 @@ const canAccessDeal = async (
   // ===================================================
 
   if (user.role === "sales") {
-
     if (!deal.owner) {
       return false;
     }
@@ -174,7 +171,6 @@ const canAccessDeal = async (
   // ===================================================
 
   if (user.role === "manager") {
-
     if (!deal.owner) {
       return false;
     }
@@ -212,7 +208,6 @@ const canAccessDeal = async (
 const createCustomerFromWonDeal = async (
   deal
 ) => {
-
   // ===================================================
   // CONTACT REQUIRED
   // ===================================================
@@ -223,7 +218,6 @@ const createCustomerFromWonDeal = async (
     );
 
   if (!contactId) {
-
     return {
       created: false,
       customer: null,
@@ -242,7 +236,6 @@ const createCustomerFromWonDeal = async (
     });
 
   if (existingCustomer) {
-
     return {
       created: false,
       customer: existingCustomer,
@@ -261,7 +254,6 @@ const createCustomerFromWonDeal = async (
     );
 
   if (!ownerId) {
-
     return {
       created: false,
       customer: null,
@@ -299,9 +291,7 @@ const createDeal = async (
   req,
   res
 ) => {
-
   try {
-
     const {
       title,
       value,
@@ -323,7 +313,6 @@ const createDeal = async (
       !title ||
       !title.trim()
     ) {
-
       return res.status(400).json({
         message:
           "Deal title is required"
@@ -338,7 +327,6 @@ const createDeal = async (
       stage !== undefined &&
       !VALID_STAGES.includes(stage)
     ) {
-
       return res.status(400).json({
         message:
           "Invalid deal stage"
@@ -350,7 +338,6 @@ const createDeal = async (
     // =================================================
 
     if (stage === "Won") {
-
       return res.status(400).json({
         message:
           "A new deal cannot be created directly as Won"
@@ -362,7 +349,6 @@ const createDeal = async (
     // =================================================
 
     if (stage === "Lost") {
-
       return res.status(400).json({
         message:
           "A new deal cannot be created directly as Lost"
@@ -381,14 +367,12 @@ const createDeal = async (
     // =================================================
 
     if (lead) {
-
       const selectedLead =
         await Lead.findById(
           lead
         ).lean();
 
       if (!selectedLead) {
-
         return res.status(404).json({
           message:
             "Lead not found"
@@ -398,21 +382,18 @@ const createDeal = async (
       if (
         selectedLead.assignedTo
       ) {
-
         const assignedUserId =
           getActualUserId(
             selectedLead.assignedTo
           );
 
         if (assignedUserId) {
-
           const assignedUser =
             await validateAssignedUser(
               assignedUserId
             );
 
           if (assignedUser) {
-
             dealOwner =
               assignedUser._id;
           }
@@ -428,14 +409,12 @@ const createDeal = async (
       owner &&
       req.user.role === "admin"
     ) {
-
       const assignedUser =
         await validateAssignedUser(
           owner
         );
 
       if (!assignedUser) {
-
         return res.status(400).json({
           message:
             "Assigned user not found or inactive"
@@ -454,14 +433,12 @@ const createDeal = async (
       owner &&
       req.user.role === "manager"
     ) {
-
       const assignedUser =
         await validateAssignedUser(
           owner
         );
 
       if (!assignedUser) {
-
         return res.status(400).json({
           message:
             "Assigned user not found or inactive"
@@ -471,7 +448,6 @@ const createDeal = async (
       if (
         assignedUser.role !== "sales"
       ) {
-
         return res.status(403).json({
           message:
             "Manager can assign deals only to Sales users"
@@ -489,7 +465,6 @@ const createDeal = async (
     if (
       req.user.role === "sales"
     ) {
-
       dealOwner =
         req.user.id;
     }
@@ -513,19 +488,16 @@ const createDeal = async (
       });
 
     // =================================================
-    // 🔔 DEAL ASSIGNED NOTIFICATION
+    // DEAL ASSIGNED NOTIFICATION
     // =================================================
 
     try {
-
       await createDealAssignedNotification({
         recipient: dealOwner,
         deal: deal._id,
         dealTitle: deal.title
       });
-
     } catch (notificationError) {
-
       console.error(
         "Deal Assignment Notification Error:",
         notificationError
@@ -563,9 +535,7 @@ const createDeal = async (
 
       deal: populatedDeal
     });
-
   } catch (error) {
-
     console.error(
       "Create deal error:",
       error
@@ -582,22 +552,57 @@ const createDeal = async (
 };
 
 // =====================================================
-// GET ALL DEALS
+// GET ALL DEALS WITH PAGINATION
 // =====================================================
 
 const getDeals = async (
   req,
   res
 ) => {
-
   try {
-
     const {
       search,
       stage,
       company,
-      owner
+      owner,
+
+      // Pagination
+      page = 1,
+      limit = 50
     } = req.query;
+
+    // =================================================
+    // PAGINATION
+    // =================================================
+
+    const currentPage = Math.max(
+      parseInt(page) || 1,
+      1
+    );
+
+    /*
+     * Maximum 50 deals per request.
+     *
+     * Example:
+     * limit=100
+     * automatically becomes 50.
+     */
+
+    const recordsPerPage = Math.min(
+      Math.max(
+        parseInt(limit) || 50,
+        1
+      ),
+      50
+    );
+
+    const skip =
+      (currentPage - 1) *
+      recordsPerPage;
+
+    // =================================================
+    // BASE FILTER
+    // =================================================
 
     let filter = {};
 
@@ -608,14 +613,12 @@ const getDeals = async (
     if (
       req.user.role === "admin"
     ) {
-
       // Admin can see all deals
     }
 
     else if (
       req.user.role === "sales"
     ) {
-
       filter.owner =
         req.user.id;
     }
@@ -623,7 +626,6 @@ const getDeals = async (
     else if (
       req.user.role === "manager"
     ) {
-
       const salesUserIds =
         await getSalesUserIds();
 
@@ -633,7 +635,6 @@ const getDeals = async (
     }
 
     else {
-
       return res.status(403).json({
         message:
           "Access denied"
@@ -645,7 +646,6 @@ const getDeals = async (
     // =================================================
 
     if (search) {
-
       filter.$or = [
         {
           title: {
@@ -667,11 +667,11 @@ const getDeals = async (
     // =================================================
 
     if (stage) {
-
       if (
-        !VALID_STAGES.includes(stage)
+        !VALID_STAGES.includes(
+          stage
+        )
       ) {
-
         return res.status(400).json({
           message:
             "Invalid deal stage"
@@ -687,7 +687,6 @@ const getDeals = async (
     // =================================================
 
     if (company) {
-
       filter.company =
         company;
     }
@@ -697,16 +696,13 @@ const getDeals = async (
     // =================================================
 
     if (owner) {
-
       if (
         req.user.role === "sales"
       ) {
-
         if (
           owner.toString() !==
           req.user.id.toString()
         ) {
-
           return res.status(403).json({
             message:
               "You can only view your own deals"
@@ -717,7 +713,6 @@ const getDeals = async (
       if (
         req.user.role === "manager"
       ) {
-
         const ownerUser =
           await User.findOne({
             _id: owner,
@@ -726,7 +721,6 @@ const getDeals = async (
           });
 
         if (!ownerUser) {
-
           return res.status(403).json({
             message:
               "Manager can only view Sales users' deals"
@@ -739,7 +733,16 @@ const getDeals = async (
     }
 
     // =================================================
-    // FETCH DEALS
+    // COUNT TOTAL DEALS
+    // =================================================
+
+    const total =
+      await Deal.countDocuments(
+        filter
+      );
+
+    // =================================================
+    // FETCH PAGINATED DEALS
     // =================================================
 
     const deals =
@@ -764,20 +767,55 @@ const getDeals = async (
         )
         .sort({
           createdAt: -1
-        });
+        })
+        .skip(skip)
+        .limit(recordsPerPage);
+
+    // =================================================
+    // TOTAL PAGES
+    // =================================================
+
+    const totalPages = Math.ceil(
+      total / recordsPerPage
+    );
+
+    // =================================================
+    // RESPONSE
+    // =================================================
 
     return res.status(200).json({
       message:
         "Deals fetched successfully",
 
+      // Current page records
       count:
         deals.length,
 
+      // Total matching records
+      total,
+
+      // Current page
+      page:
+        currentPage,
+
+      // Maximum records per request
+      limit:
+        recordsPerPage,
+
+      // Total pages
+      totalPages,
+
+      // Pagination flags
+      hasNextPage:
+        currentPage < totalPages,
+
+      hasPreviousPage:
+        currentPage > 1,
+
+      // Deal data
       deals
     });
-
   } catch (error) {
-
     console.error(
       "Get deals error:",
       error
@@ -801,15 +839,12 @@ const getDealById = async (
   req,
   res
 ) => {
-
   try {
-
     if (
       !mongoose.isValidObjectId(
         req.params.id
       )
     ) {
-
       return res.status(400).json({
         message:
           "Invalid deal ID"
@@ -822,7 +857,6 @@ const getDealById = async (
       );
 
     if (!deal) {
-
       return res.status(404).json({
         message:
           "Deal not found"
@@ -840,7 +874,6 @@ const getDealById = async (
       );
 
     if (!hasAccess) {
-
       return res.status(403).json({
         message:
           "You do not have permission to view this deal"
@@ -879,9 +912,7 @@ const getDealById = async (
       deal:
         populatedDeal
     });
-
   } catch (error) {
-
     console.error(
       "Get deal error:",
       error
@@ -905,15 +936,12 @@ const updateDeal = async (
   req,
   res
 ) => {
-
   try {
-
     if (
       !mongoose.isValidObjectId(
         req.params.id
       )
     ) {
-
       return res.status(400).json({
         message:
           "Invalid deal ID"
@@ -926,7 +954,6 @@ const updateDeal = async (
       );
 
     if (!deal) {
-
       return res.status(404).json({
         message:
           "Deal not found"
@@ -944,7 +971,6 @@ const updateDeal = async (
       );
 
     if (!hasAccess) {
-
       return res.status(403).json({
         message:
           "You do not have permission to update this deal"
@@ -988,12 +1014,10 @@ const updateDeal = async (
     if (
       title !== undefined
     ) {
-
       if (
         !title ||
         !title.trim()
       ) {
-
         return res.status(400).json({
           message:
             "Deal title is required"
@@ -1007,7 +1031,6 @@ const updateDeal = async (
     if (
       value !== undefined
     ) {
-
       deal.value =
         value;
     }
@@ -1015,7 +1038,6 @@ const updateDeal = async (
     if (
       expectedCloseDate !== undefined
     ) {
-
       deal.expectedCloseDate =
         expectedCloseDate;
     }
@@ -1023,7 +1045,6 @@ const updateDeal = async (
     if (
       company !== undefined
     ) {
-
       deal.company =
         company;
     }
@@ -1031,7 +1052,6 @@ const updateDeal = async (
     if (
       contact !== undefined
     ) {
-
       deal.contact =
         contact;
     }
@@ -1039,7 +1059,6 @@ const updateDeal = async (
     if (
       lead !== undefined
     ) {
-
       deal.lead =
         lead;
     }
@@ -1047,7 +1066,6 @@ const updateDeal = async (
     if (
       description !== undefined
     ) {
-
       deal.description =
         description;
     }
@@ -1059,7 +1077,6 @@ const updateDeal = async (
     if (
       stage !== undefined
     ) {
-
       // -------------------------------------------------
       // VALIDATE STAGE
       // -------------------------------------------------
@@ -1069,7 +1086,6 @@ const updateDeal = async (
           stage
         )
       ) {
-
         return res.status(400).json({
           message:
             "Invalid deal stage"
@@ -1083,9 +1099,7 @@ const updateDeal = async (
       if (
         stage === "Lost"
       ) {
-
         if (!lostReason) {
-
           return res.status(400).json({
             message:
               "Lost reason is required when marking a deal as Lost"
@@ -1097,7 +1111,6 @@ const updateDeal = async (
             lostReason
           )
         ) {
-
           return res.status(400).json({
             message:
               "Invalid lost reason"
@@ -1127,9 +1140,7 @@ const updateDeal = async (
       else if (
         stage === "Won"
       ) {
-
         if (!deal.contact) {
-
           return res.status(400).json({
             message:
               "A contact is required before marking the deal as Won"
@@ -1157,7 +1168,6 @@ const updateDeal = async (
       // -------------------------------------------------
 
       else {
-
         deal.stage =
           stage;
 
@@ -1181,7 +1191,6 @@ const updateDeal = async (
       stage !== "Won" &&
       stage !== "Lost"
     ) {
-
       const numericProbability =
         Number(probability);
 
@@ -1192,7 +1201,6 @@ const updateDeal = async (
         numericProbability < 0 ||
         numericProbability > 100
       ) {
-
         return res.status(400).json({
           message:
             "Probability must be between 0 and 100"
@@ -1212,13 +1220,11 @@ const updateDeal = async (
       deal.stage === "Lost" &&
       stage === undefined
     ) {
-
       if (
         !VALID_LOST_REASONS.includes(
           lostReason
         )
       ) {
-
         return res.status(400).json({
           message:
             "Invalid lost reason"
@@ -1229,7 +1235,6 @@ const updateDeal = async (
         lostReason;
 
       if (!deal.lostAt) {
-
         deal.lostAt =
           new Date();
       }
@@ -1242,7 +1247,6 @@ const updateDeal = async (
     if (
       owner !== undefined
     ) {
-
       // -------------------------------------------------
       // SALES CANNOT CHANGE OWNER
       // -------------------------------------------------
@@ -1250,7 +1254,6 @@ const updateDeal = async (
       if (
         req.user.role === "sales"
       ) {
-
         return res.status(403).json({
           message:
             "Sales users cannot change deal owner"
@@ -1267,7 +1270,6 @@ const updateDeal = async (
         );
 
       if (!assignedUser) {
-
         return res.status(400).json({
           message:
             "Assigned user not found or inactive"
@@ -1282,7 +1284,6 @@ const updateDeal = async (
         req.user.role === "manager" &&
         assignedUser.role !== "sales"
       ) {
-
         return res.status(403).json({
           message:
             "Manager can assign deals only to Sales users"
@@ -1309,7 +1310,7 @@ const updateDeal = async (
       );
 
     // =================================================
-    // 🔔 DEAL REASSIGNMENT NOTIFICATION
+    // DEAL REASSIGNMENT NOTIFICATION
     // =================================================
 
     const ownerChanged =
@@ -1319,17 +1320,13 @@ const updateDeal = async (
         newOwner.toString();
 
     if (ownerChanged) {
-
       try {
-
         await createDealAssignedNotification({
           recipient: newOwner,
           deal: deal._id,
           dealTitle: deal.title
         });
-
       } catch (notificationError) {
-
         console.error(
           "Deal Reassignment Notification Error:",
           notificationError
@@ -1351,7 +1348,6 @@ const updateDeal = async (
       stage === "Won" &&
       previousStage !== "Won"
     ) {
-
       const customerResult =
         await createCustomerFromWonDeal(
           deal
@@ -1365,32 +1361,27 @@ const updateDeal = async (
     }
 
     // =================================================
-    // 🔔 DEAL WON NOTIFICATION
+    // DEAL WON NOTIFICATION
     // =================================================
 
     if (
       stage === "Won" &&
       previousStage !== "Won"
     ) {
-
       try {
-
         const dealOwnerId =
           getActualUserId(
             deal.owner
           );
 
         if (dealOwnerId) {
-
           await createDealWonNotification({
             recipient: dealOwnerId,
             deal: deal._id,
             dealTitle: deal.title
           });
         }
-
       } catch (notificationError) {
-
         console.error(
           "Deal Won Notification Error:",
           notificationError
@@ -1399,33 +1390,29 @@ const updateDeal = async (
     }
 
     // =================================================
-    // 🔔 DEAL LOST NOTIFICATION
+    // DEAL LOST NOTIFICATION
     // =================================================
 
     if (
       stage === "Lost" &&
       previousStage !== "Lost"
     ) {
-
       try {
-
         const dealOwnerId =
           getActualUserId(
             deal.owner
           );
 
         if (dealOwnerId) {
-
           await createDealLostNotification({
             recipient: dealOwnerId,
             deal: deal._id,
             dealTitle: deal.title,
-            lostReason: deal.lostReason
+            lostReason:
+              deal.lostReason
           });
         }
-
       } catch (notificationError) {
-
         console.error(
           "Deal Lost Notification Error:",
           notificationError
@@ -1438,7 +1425,6 @@ const updateDeal = async (
     // =================================================
 
     if (customer) {
-
       customer =
         await Customer.findById(
           customer._id
@@ -1462,30 +1448,26 @@ const updateDeal = async (
     }
 
     // =================================================
-    // 🔔 CUSTOMER CREATED NOTIFICATION
+    // CUSTOMER CREATED NOTIFICATION
     // =================================================
 
     if (
       customerCreated &&
       customer
     ) {
-
       try {
-
         const customerOwnerId =
           getActualUserId(
             customer.owner
           );
 
         if (customerOwnerId) {
-
           let customerName =
             "New Customer";
 
           if (
             customer.contact
           ) {
-
             const firstName =
               customer.contact.firstName ||
               "";
@@ -1500,14 +1482,14 @@ const updateDeal = async (
           }
 
           await createCustomerCreatedNotification({
-            recipient: customerOwnerId,
-            customer: customer._id,
+            recipient:
+              customerOwnerId,
+            customer:
+              customer._id,
             customerName
           });
         }
-
       } catch (notificationError) {
-
         console.error(
           "Customer Creation Notification Error:",
           notificationError
@@ -1551,16 +1533,15 @@ const updateDeal = async (
       stage === "Won" &&
       customerCreated
     ) {
-
       message =
         "Deal marked as Won and Customer created successfully";
+    }
 
-    } else if (
+    else if (
       stage === "Won" &&
       customer &&
       !customerCreated
     ) {
-
       message =
         "Deal marked as Won. Customer already exists";
     }
@@ -1570,7 +1551,6 @@ const updateDeal = async (
     // =================================================
 
     return res.status(200).json({
-
       message,
 
       deal:
@@ -1578,9 +1558,7 @@ const updateDeal = async (
 
       customer
     });
-
   } catch (error) {
-
     console.error(
       "Update deal error:",
       error
@@ -1604,9 +1582,7 @@ const deleteDeal = async (
   req,
   res
 ) => {
-
   try {
-
     // =================================================
     // ADMIN ONLY
     // =================================================
@@ -1614,7 +1590,6 @@ const deleteDeal = async (
     if (
       req.user.role !== "admin"
     ) {
-
       return res.status(403).json({
         message:
           "Only admin can delete deals"
@@ -1626,7 +1601,6 @@ const deleteDeal = async (
         req.params.id
       )
     ) {
-
       return res.status(400).json({
         message:
           "Invalid deal ID"
@@ -1639,7 +1613,6 @@ const deleteDeal = async (
       );
 
     if (!deal) {
-
       return res.status(404).json({
         message:
           "Deal not found"
@@ -1650,9 +1623,7 @@ const deleteDeal = async (
       message:
         "Deal deleted successfully"
     });
-
   } catch (error) {
-
     console.error(
       "Delete deal error:",
       error
@@ -1660,10 +1631,7 @@ const deleteDeal = async (
 
     return res.status(500).json({
       message:
-        "Server error",
-
-      error:
-        error.message
+        "Server error"
     });
   }
 };
@@ -1676,9 +1644,7 @@ const getAssignableUsers = async (
   req,
   res
 ) => {
-
   try {
-
     let filter = {
       isActive: true
     };
@@ -1690,7 +1656,6 @@ const getAssignableUsers = async (
     if (
       req.user.role === "admin"
     ) {
-
       filter.role = {
         $in: [
           "admin",
@@ -1707,7 +1672,6 @@ const getAssignableUsers = async (
     else if (
       req.user.role === "manager"
     ) {
-
       filter.role =
         "sales";
     }
@@ -1717,7 +1681,6 @@ const getAssignableUsers = async (
     // =================================================
 
     else {
-
       return res.status(403).json({
         message:
           "Sales users cannot access assignable users"
@@ -1748,9 +1711,7 @@ const getAssignableUsers = async (
 
       users
     });
-
   } catch (error) {
-
     console.error(
       "Get assignable users error:",
       error

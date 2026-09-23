@@ -1,4 +1,3 @@
-
 const Customer = require("../models/Customer");
 const User = require("../models/User");
 const Contact = require("../models/Contact");
@@ -14,42 +13,36 @@ const getCustomers = async (req, res) => {
       search = "",
       status = "",
       page = 1,
-      limit = 10
+      limit = 50,
     } = req.query;
 
     let filter = {};
 
-    // -----------------------------------------
-    // RBAC
-    // -----------------------------------------
-
+    // Sales → only own customers
     if (req.user.role === "sales") {
       filter.owner = req.user.id;
     }
 
+    // Manager → customers owned by Sales users
     if (req.user.role === "manager") {
       const salesUsers = await User.find({
         role: "sales",
-        isActive: true
+        isActive: true,
       }).select("_id");
 
       const salesIds = salesUsers.map((user) => user._id);
 
-      filter.owner = { $in: salesIds };
+      filter.owner = {
+        $in: salesIds,
+      };
     }
 
-    // -----------------------------------------
-    // STATUS FILTER
-    // -----------------------------------------
-
+    // Status filter
     if (status) {
       filter.status = status;
     }
 
-    // -----------------------------------------
-    // SEARCH
-    // -----------------------------------------
-
+    // Search
     if (search.trim()) {
       const regex = new RegExp(search.trim(), "i");
 
@@ -58,37 +51,48 @@ const getCustomers = async (req, res) => {
           { firstName: regex },
           { lastName: regex },
           { email: regex },
-          { phone: regex }
-        ]
+          { phone: regex },
+        ],
       }).select("_id");
 
       const companies = await Company.find({
-        name: regex
+        name: regex,
       }).select("_id");
 
       filter.$or = [
         {
           contact: {
-            $in: contacts.map((c) => c._id)
-          }
+            $in: contacts.map((c) => c._id),
+          },
         },
         {
           company: {
-            $in: companies.map((c) => c._id)
-          }
-        }
+            $in: companies.map((c) => c._id),
+          },
+        },
       ];
     }
 
-    // -----------------------------------------
+    // =====================================================
     // PAGINATION
-    // -----------------------------------------
+    // =====================================================
 
-    const pageNumber = Math.max(Number(page), 1);
-    const limitNumber = Math.max(Number(limit), 1);
-    const skip = (pageNumber - 1) * limitNumber;
+    const pageNumber = Math.max(
+      Number(page) || 1,
+      1
+    );
 
-    const total = await Customer.countDocuments(filter);
+    const limitNumber = Math.min(
+      Math.max(Number(limit) || 50, 1),
+      50
+    );
+
+    const skip =
+      (pageNumber - 1) * limitNumber;
+
+    const total = await Customer.countDocuments(
+      filter
+    );
 
     const customers = await Customer.find(filter)
       .populate("contact")
@@ -99,20 +103,30 @@ const getCustomers = async (req, res) => {
       .skip(skip)
       .limit(limitNumber);
 
+    const totalPages = Math.ceil(
+      total / limitNumber
+    );
+
     res.status(200).json({
       message: "Customers fetched successfully",
       count: customers.length,
       total,
       page: pageNumber,
-      pages: Math.ceil(total / limitNumber),
-      customers
+      limit: limitNumber,
+      totalPages,
+      hasNextPage: pageNumber < totalPages,
+      hasPreviousPage: pageNumber > 1,
+      customers,
     });
   } catch (error) {
-    console.error("Get Customers Error:", error);
+    console.error(
+      "Get Customers Error:",
+      error
+    );
 
     res.status(500).json({
       message: "Failed to fetch customers",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -122,7 +136,9 @@ const getCustomers = async (req, res) => {
 // =====================================================
 const getCustomerById = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id)
+    const customer = await Customer.findById(
+      req.params.id
+    )
       .populate("contact")
       .populate("company")
       .populate("convertedFromDeal")
@@ -130,27 +146,20 @@ const getCustomerById = async (req, res) => {
 
     if (!customer) {
       return res.status(404).json({
-        message: "Customer not found"
+        message: "Customer not found",
       });
     }
-
-    // -----------------------------------------
-    // SALES
-    // -----------------------------------------
 
     if (
       req.user.role === "sales" &&
       customer.owner &&
-      customer.owner._id.toString() !== req.user.id.toString()
+      customer.owner._id.toString() !==
+        req.user.id.toString()
     ) {
       return res.status(403).json({
-        message: "Access denied"
+        message: "Access denied",
       });
     }
-
-    // -----------------------------------------
-    // MANAGER
-    // -----------------------------------------
 
     if (req.user.role === "manager") {
       if (
@@ -158,21 +167,24 @@ const getCustomerById = async (req, res) => {
         customer.owner.role !== "sales"
       ) {
         return res.status(403).json({
-          message: "Access denied"
+          message: "Access denied",
         });
       }
     }
 
     res.status(200).json({
       message: "Customer fetched successfully",
-      customer
+      customer,
     });
   } catch (error) {
-    console.error("Get Customer Error:", error);
+    console.error(
+      "Get Customer Error:",
+      error
+    );
 
     res.status(500).json({
       message: "Failed to fetch customer",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -189,183 +201,165 @@ const createCustomer = async (req, res) => {
       owner,
       customerSince,
       status,
-      notes
+      notes,
     } = req.body;
-
-    // -----------------------------------------
-    // REQUIRED FIELDS
-    // -----------------------------------------
 
     if (!contact) {
       return res.status(400).json({
-        message: "Contact is required"
+        message: "Contact is required",
       });
     }
 
     if (!convertedFromDeal) {
       return res.status(400).json({
-        message: "Converted deal is required"
+        message: "Converted deal is required",
       });
     }
 
-    // -----------------------------------------
-    // CHECK CONTACT
-    // -----------------------------------------
-
-    const contactDoc = await Contact.findById(contact);
+    const contactDoc =
+      await Contact.findById(contact);
 
     if (!contactDoc) {
       return res.status(404).json({
-        message: "Contact not found"
+        message: "Contact not found",
       });
     }
 
-    // -----------------------------------------
-    // CHECK DEAL
-    // -----------------------------------------
-
-    const deal = await Deal.findById(convertedFromDeal);
+    const deal = await Deal.findById(
+      convertedFromDeal
+    );
 
     if (!deal) {
       return res.status(404).json({
-        message: "Deal not found"
+        message: "Deal not found",
       });
     }
-
-    // -----------------------------------------
-    // DEAL MUST BE WON
-    // -----------------------------------------
 
     if (deal.stage !== "Won") {
       return res.status(400).json({
-        message: "Customer can be created only from a Won deal"
+        message:
+          "Customer can be created only from a Won deal",
       });
     }
-
-    // -----------------------------------------
-    // DEAL CONTACT CONSISTENCY
-    // -----------------------------------------
 
     if (!deal.contact) {
       return res.status(400).json({
-        message: "Won deal does not have a contact"
+        message:
+          "Won deal does not have a contact",
       });
     }
 
-    if (deal.contact.toString() !== contact.toString()) {
+    if (
+      deal.contact.toString() !==
+      contact.toString()
+    ) {
       return res.status(400).json({
-        message: "Selected contact does not belong to this deal"
+        message:
+          "Selected contact does not belong to this deal",
       });
     }
-
-    // -----------------------------------------
-    // COMPANY CONSISTENCY
-    // -----------------------------------------
 
     if (deal.company && company) {
-      if (deal.company.toString() !== company.toString()) {
+      if (
+        deal.company.toString() !==
+        company.toString()
+      ) {
         return res.status(400).json({
-          message: "Selected company does not belong to this deal"
+          message:
+            "Selected company does not belong to this deal",
         });
       }
     }
 
-    // -----------------------------------------
-    // IF COMPANY NOT PROVIDED
-    // USE DEAL COMPANY
-    // -----------------------------------------
+    const finalCompany =
+      company ||
+      deal.company ||
+      contactDoc.company ||
+      null;
 
-    let finalCompany = company || deal.company || contactDoc.company || null;
-
-    // -----------------------------------------
-    // DUPLICATE PROTECTION
-    // -----------------------------------------
-
-    const existingCustomer = await Customer.findOne({
-      contact
-    });
+    const existingCustomer =
+      await Customer.findOne({
+        contact,
+      });
 
     if (existingCustomer) {
       return res.status(409).json({
-        message: "This contact is already a customer",
-        customer: existingCustomer
+        message:
+          "This contact is already a customer",
+        customer: existingCustomer,
       });
     }
-
-    // -----------------------------------------
-    // OWNER
-    // -----------------------------------------
 
     let finalOwner = req.user.id;
 
     if (req.user.role === "sales") {
       finalOwner = req.user.id;
     } else if (owner) {
-      const ownerUser = await User.findOne({
-        _id: owner,
-        isActive: true
-      });
+      const ownerUser =
+        await User.findOne({
+          _id: owner,
+          isActive: true,
+        });
 
       if (!ownerUser) {
         return res.status(400).json({
-          message: "Invalid owner"
+          message: "Invalid owner",
         });
       }
 
-      // Manager can assign only Sales
       if (
         req.user.role === "manager" &&
         ownerUser.role !== "sales"
       ) {
         return res.status(403).json({
-          message: "Manager can assign customers only to Sales users"
+          message:
+            "Manager can assign customers only to Sales users",
         });
       }
 
       finalOwner = ownerUser._id;
     }
 
-    // -----------------------------------------
-    // CREATE CUSTOMER
-    // -----------------------------------------
+    const customer =
+      await Customer.create({
+        contact,
+        company: finalCompany,
+        convertedFromDeal,
+        owner: finalOwner,
+        customerSince:
+          customerSince || new Date(),
+        status: status || "Active",
+        notes,
+      });
 
-    const customer = await Customer.create({
-      contact,
-      company: finalCompany,
-      convertedFromDeal,
-      owner: finalOwner,
-      customerSince: customerSince || new Date(),
-      status: status || "Active",
-      notes
-    });
-
-    // -----------------------------------------
-    // POPULATE RESPONSE
-    // -----------------------------------------
-
-    const populatedCustomer = await Customer.findById(customer._id)
-      .populate("contact")
-      .populate("company")
-      .populate("convertedFromDeal")
-      .populate("owner", "name email role");
+    const populatedCustomer =
+      await Customer.findById(customer._id)
+        .populate("contact")
+        .populate("company")
+        .populate("convertedFromDeal")
+        .populate("owner", "name email role");
 
     res.status(201).json({
-      message: "Customer created successfully",
-      customer: populatedCustomer
+      message:
+        "Customer created successfully",
+      customer: populatedCustomer,
     });
   } catch (error) {
-    console.error("Create Customer Error:", error);
+    console.error(
+      "Create Customer Error:",
+      error
+    );
 
-    // Duplicate key protection
     if (error.code === 11000) {
       return res.status(409).json({
-        message: "This contact is already a customer"
+        message:
+          "This contact is already a customer",
       });
     }
 
     res.status(500).json({
       message: "Failed to create customer",
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -375,37 +369,36 @@ const createCustomer = async (req, res) => {
 // =====================================================
 const updateCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer =
+      await Customer.findById(req.params.id);
 
     if (!customer) {
       return res.status(404).json({
-        message: "Customer not found"
+        message: "Customer not found",
       });
     }
-
-    // -----------------------------------------
-    // SALES
-    // -----------------------------------------
 
     if (
       req.user.role === "sales" &&
-      customer.owner.toString() !== req.user.id.toString()
+      customer.owner.toString() !==
+        req.user.id.toString()
     ) {
       return res.status(403).json({
-        message: "You can update only your customers"
+        message:
+          "You can update only your customers",
       });
     }
 
-    // -----------------------------------------
-    // MANAGER
-    // -----------------------------------------
-
     if (req.user.role === "manager") {
-      const ownerUser = await User.findById(customer.owner);
+      const ownerUser =
+        await User.findById(customer.owner);
 
-      if (!ownerUser || ownerUser.role !== "sales") {
+      if (
+        !ownerUser ||
+        ownerUser.role !== "sales"
+      ) {
         return res.status(403).json({
-          message: "Access denied"
+          message: "Access denied",
         });
       }
     }
@@ -414,55 +407,48 @@ const updateCustomer = async (req, res) => {
       status,
       notes,
       owner,
-      customerSince
+      customerSince,
     } = req.body;
 
-    // -----------------------------------------
-    // STATUS
-    // -----------------------------------------
-
     if (status !== undefined) {
-      if (!["Active", "Inactive", "Churned"].includes(status)) {
+      if (
+        ![
+          "Active",
+          "Inactive",
+          "Churned",
+        ].includes(status)
+      ) {
         return res.status(400).json({
-          message: "Invalid customer status"
+          message:
+            "Invalid customer status",
         });
       }
 
       customer.status = status;
     }
 
-    // -----------------------------------------
-    // NOTES
-    // -----------------------------------------
-
     if (notes !== undefined) {
       customer.notes = notes;
     }
 
-    // -----------------------------------------
-    // CUSTOMER SINCE
-    // -----------------------------------------
-
     if (customerSince !== undefined) {
-      customer.customerSince = customerSince;
+      customer.customerSince =
+        customerSince;
     }
-
-    // -----------------------------------------
-    // OWNER CHANGE
-    // -----------------------------------------
 
     if (
       owner &&
       req.user.role !== "sales"
     ) {
-      const newOwner = await User.findOne({
-        _id: owner,
-        isActive: true
-      });
+      const newOwner =
+        await User.findOne({
+          _id: owner,
+          isActive: true,
+        });
 
       if (!newOwner) {
         return res.status(400).json({
-          message: "Invalid owner"
+          message: "Invalid owner",
         });
       }
 
@@ -471,7 +457,8 @@ const updateCustomer = async (req, res) => {
         newOwner.role !== "sales"
       ) {
         return res.status(403).json({
-          message: "Manager can assign only to Sales users"
+          message:
+            "Manager can assign only to Sales users",
         });
       }
 
@@ -480,22 +467,28 @@ const updateCustomer = async (req, res) => {
 
     await customer.save();
 
-    const updatedCustomer = await Customer.findById(customer._id)
-      .populate("contact")
-      .populate("company")
-      .populate("convertedFromDeal")
-      .populate("owner", "name email role");
+    const updatedCustomer =
+      await Customer.findById(customer._id)
+        .populate("contact")
+        .populate("company")
+        .populate("convertedFromDeal")
+        .populate("owner", "name email role");
 
     res.status(200).json({
-      message: "Customer updated successfully",
-      customer: updatedCustomer
+      message:
+        "Customer updated successfully",
+      customer: updatedCustomer,
     });
   } catch (error) {
-    console.error("Update Customer Error:", error);
+    console.error(
+      "Update Customer Error:",
+      error
+    );
 
     res.status(500).json({
-      message: "Failed to update customer",
-      error: error.message
+      message:
+        "Failed to update customer",
+      error: error.message,
     });
   }
 };
@@ -505,25 +498,33 @@ const updateCustomer = async (req, res) => {
 // =====================================================
 const deleteCustomer = async (req, res) => {
   try {
-    const customer = await Customer.findById(req.params.id);
+    const customer =
+      await Customer.findById(req.params.id);
 
     if (!customer) {
       return res.status(404).json({
-        message: "Customer not found"
+        message: "Customer not found",
       });
     }
 
-    await Customer.findByIdAndDelete(req.params.id);
+    await Customer.findByIdAndDelete(
+      req.params.id
+    );
 
     res.status(200).json({
-      message: "Customer deleted successfully"
+      message:
+        "Customer deleted successfully",
     });
   } catch (error) {
-    console.error("Delete Customer Error:", error);
+    console.error(
+      "Delete Customer Error:",
+      error
+    );
 
     res.status(500).json({
-      message: "Failed to delete customer",
-      error: error.message
+      message:
+        "Failed to delete customer",
+      error: error.message,
     });
   }
 };
@@ -531,10 +532,13 @@ const deleteCustomer = async (req, res) => {
 // =====================================================
 // GET ASSIGNABLE USERS
 // =====================================================
-const getAssignableUsers = async (req, res) => {
+const getAssignableUsers = async (
+  req,
+  res
+) => {
   try {
     let filter = {
-      isActive: true
+      isActive: true,
     };
 
     if (req.user.role === "manager") {
@@ -543,7 +547,8 @@ const getAssignableUsers = async (req, res) => {
 
     if (req.user.role === "sales") {
       return res.status(403).json({
-        message: "Sales users cannot assign customers"
+        message:
+          "Sales users cannot assign customers",
       });
     }
 
@@ -552,15 +557,20 @@ const getAssignableUsers = async (req, res) => {
       .sort({ name: 1 });
 
     res.status(200).json({
-      message: "Assignable users fetched successfully",
-      users
+      message:
+        "Assignable users fetched successfully",
+      users,
     });
   } catch (error) {
-    console.error("Assignable Users Error:", error);
+    console.error(
+      "Assignable Users Error:",
+      error
+    );
 
     res.status(500).json({
-      message: "Failed to fetch assignable users",
-      error: error.message
+      message:
+        "Failed to fetch assignable users",
+      error: error.message,
     });
   }
 };
@@ -571,6 +581,5 @@ module.exports = {
   createCustomer,
   updateCustomer,
   deleteCustomer,
-  getAssignableUsers
+  getAssignableUsers,
 };
-
